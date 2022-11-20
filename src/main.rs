@@ -5,6 +5,7 @@ extern crate signal_hook;
 use std::fs::File;
 use std::io::Read;
 use std::io::Write;
+use std::{thread, time::Duration};
 use signal_hook::{iterator, consts::{SIGINT, SIGTERM, SIGQUIT}};
 
 macro_rules! abort(
@@ -47,8 +48,11 @@ fn do_work(args: Vec<String>, max_path: String, used_path: String, interval: u64
             };
 
             if used > max_allowed {
+                eprintln!("preoomkiller: memory exceeded, sending SIGTERM ...");
                 unsafe { libc::kill(child_id as i32, libc::SIGTERM); }
-                eprintln!("Terminated by preoomkiller");
+                eprintln!("preoomkiller: wait after SIGTERM ...");
+                thread::sleep(Duration::from_secs(8));
+                eprintln!("preoomkiller: terminated by preoomkiller, exit");
                 std::process::exit(1)
             }
         }
