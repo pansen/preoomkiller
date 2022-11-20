@@ -51,6 +51,12 @@ fn do_work(args: Vec<String>, max_path: String, used_path: String, interval: u64
                 eprintln!("preoomkiller: memory exceeded, sending SIGTERM ...");
                 unsafe { libc::kill(child_id as i32, libc::SIGTERM); }
                 eprintln!("preoomkiller: wait after SIGTERM ...");
+
+                let url = "127.0.0.1:4001/_shutdown";
+                eprintln!("preoomkiller: sending request to: {:#?}...", url);
+                let resp = reqwest::blocking::get(url);
+                println!("preoomkiller: response: {:#?}", resp);
+
                 thread::sleep(Duration::from_secs(8));
                 eprintln!("preoomkiller: terminated by preoomkiller, exit");
                 std::process::exit(1)
