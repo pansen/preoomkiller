@@ -5,7 +5,7 @@ extern crate signal_hook;
 use std::fs::File;
 use std::io::Read;
 use std::io::Write;
-use std::{thread, time::Duration};
+use std::{env, thread, time::Duration};
 use signal_hook::{iterator, consts::{SIGINT, SIGTERM, SIGQUIT}};
 
 macro_rules! abort(
@@ -54,8 +54,11 @@ fn do_work(args: Vec<String>, max_path: String, used_path: String, interval: u64
                 unsafe { libc::kill(child_id as i32, libc::SIGTERM); }
                 eprintln!("preoomkiller: wait after SIGTERM ...");
 
-                let url = "http://127.0.0.1:4001/_shutdown";
+                let service_port = env::var("SERVICE_PORT")
+                    .unwrap_or("4001".to_string());
+                let url = format!("http://127.0.0.1:{}/_shutdown", service_port);
                 eprintln!("preoomkiller: sending request to: {:#?}...", url);
+
                 let resp = reqwest::blocking::get(url);
                 println!("preoomkiller: response: {:#?}", resp);
 
