@@ -50,7 +50,8 @@ fn do_work(args: Vec<String>, max_path: String, used_path: String, interval: u64
             if used > max_allowed {
                 let time_to_wait_sec = 24;
 
-                eprintln!("preoomkiller: memory exceeded, sending SIGTERM ...");
+                eprintln!("preoomkiller: memory: {:#?} exceeded: {:#?}, sending SIGTERM ...",
+                          used, max_allowed);
                 unsafe { libc::kill(child_id as i32, libc::SIGTERM); }
                 eprintln!("preoomkiller: wait after SIGTERM ...");
 
