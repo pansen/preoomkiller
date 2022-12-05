@@ -2,13 +2,14 @@ extern crate libc;
 extern crate getopts;
 extern crate regex;
 extern crate signal_hook;
+
 use std::fs::File;
 use std::io::Read;
 use std::io::Write;
 use std::{env, thread, time::Duration};
 use signal_hook::{iterator, consts::{SIGINT, SIGTERM, SIGQUIT}};
 
-macro_rules! abort(
+macro_rules! abort (
     ($($arg:tt)*) => { {
         writeln!(&mut std::io::stderr(), $($arg)*).expect("failed printing to stderr");
         std::process::exit(1)
@@ -34,16 +35,22 @@ fn do_work(args: Vec<String>, max_path: String, used_path: String, interval: u64
         loop {
             // If the child is done we can stop and do not need to do any checks
             match rx.recv_timeout(std::time::Duration::from_millis(interval)) {
-                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => { }
-                Ok(_) | Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => { break }
+                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {}
+                Ok(_) | Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => { break; }
             }
 
             // used is a single number of bytes
             let used = parse_int(&read_file(&used_path));
 
             // max is bytes after hierarchical_memory_limit adjusted by what the user deems safe
+            // TODO andi: this is only for older Docker runtimes, in newer installations, we just use
+            //   a file with *one* explicit `limit` number in it.
+            // let max_allowed = {
+            //     let system_max = parse_int(&_capture(&read_file(&max_path), r"hierarchical_memory_limit\s+(\d+)", 1));
+            //     (system_max / 100) * max_usage_percent
+            // };
             let max_allowed = {
-                let system_max = parse_int(&capture(&read_file(&max_path), r"hierarchical_memory_limit\s+(\d+)", 1));
+                let system_max = parse_int(&read_file(&max_path));
                 (system_max / 100) * max_usage_percent
             };
 
@@ -93,7 +100,7 @@ fn parse_int(string: &String) -> u64 {
     string.trim().parse::<u64>().unwrap()
 }
 
-fn capture(string: &String, pattern: &str, index: usize) -> String {
+fn _capture(string: &String, pattern: &str, index: usize) -> String {
     let regex = regex::Regex::new(pattern).unwrap();
     regex.captures(&string).unwrap().get(index).unwrap().as_str().to_string()
 }
@@ -116,7 +123,7 @@ fn main() {
 
     let mut opts = getopts::Options::new();
     opts.parsing_style(getopts::ParsingStyle::StopAtFirstFree);
-    opts.optopt("m", "max-memory-file", "set file to read maximum memory from, default: /sys/fs/cgroup/memory/memory.stat", "PATH");
+    opts.optopt("m", "max-memory-file", "set file to read maximum memory from, default: /sys/fs/cgroup/memory/memory.limit_in_bytes", "PATH");
     opts.optopt("u", "used-memory-file", "set file to read used memory from, default: /sys/fs/cgroup/memory/memory.usage_in_bytes", "PATH");
     opts.optopt("i", "interval", "how often to check memory usage, default: 1", "SECONDS");
     opts.optopt("p", "percent", "maximum memory usage percent, default: 90", "PERCENT"); // TODO: float support
@@ -148,7 +155,7 @@ fn main() {
 
     // Parse max-memory file location or use default
     let max_memory_file = matches.opt_str("max-memory-file").
-        unwrap_or_else(|| "/sys/fs/cgroup/memory/memory.stat".to_string());
+        unwrap_or_else(|| "/sys/fs/cgroup/memory/memory.limit_in_bytes".to_string());
 
     // Parse used-memory file location or use default
     let used_memory_file = matches.opt_str("used-memory-file").
@@ -156,12 +163,12 @@ fn main() {
 
     // Parse interval to milliseconds
     let interval = {
-        let raw_interval:f64 = matches.opt_str("interval").unwrap_or_else(|| "1".to_string()).parse().unwrap();
+        let raw_interval: f64 = matches.opt_str("interval").unwrap_or_else(|| "1".to_string()).parse().unwrap();
         (raw_interval * 1000.0).round() as u64
     };
 
     // Parse max usage percent to integer
-    let max_usage_percent:u64 = matches.opt_str("percent").unwrap_or_else(|| "90".to_string()).parse::<u64>().unwrap();
+    let max_usage_percent: u64 = matches.opt_str("percent").unwrap_or_else(|| "90".to_string()).parse::<u64>().unwrap();
     if max_usage_percent >= 100 {
         abort!("Using >= 100 percent of memory will never happen since the process would already be OOM")
     }
