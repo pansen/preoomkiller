@@ -1,3 +1,5 @@
+mod args;
+
 extern crate libc;
 extern crate getopts;
 extern crate regex;
@@ -118,6 +120,7 @@ fn print_usage(program: &str, opts: getopts::Options) {
 }
 
 fn main() {
+    let _config = args::Config::configure().unwrap();
     let mut args: Vec<String> = std::env::args().collect();
     let program = args.remove(0);
 
