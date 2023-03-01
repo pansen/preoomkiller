@@ -17,6 +17,8 @@ macro_rules! abort (
 );
 
 fn do_work(args: Vec<String>, max_path: String, used_path: String, interval: u64, max_usage_percent: u64) {
+    let time_to_wait_sec = 24;
+
     // read both files once to make sure they exist before we start our child
     read_file(&used_path);
     read_file(&max_path);
@@ -55,23 +57,14 @@ fn do_work(args: Vec<String>, max_path: String, used_path: String, interval: u64
             };
 
             if used > max_allowed {
-                let time_to_wait_sec = 24;
 
                 eprintln!("preoomkiller: memory: {:#?} exceeded: {:#?}, sending SIGTERM ...",
                           used, max_allowed);
+
+                _shutdown_hook(time_to_wait_sec);
+
+                eprintln!("preoomkiller: sending SIGTERM ...");
                 unsafe { libc::kill(child_id as i32, libc::SIGTERM); }
-                eprintln!("preoomkiller: wait after SIGTERM ...");
-
-                let service_port = env::var("SERVICE_PORT")
-                    .unwrap_or("4001".to_string());
-                let url = format!("http://127.0.0.1:{}/_shutdown", service_port);
-                eprintln!("preoomkiller: sending request to: {:#?}...", url);
-
-                let resp = reqwest::blocking::get(url);
-                println!("preoomkiller: response: {:#?}", resp);
-
-                thread::sleep(Duration::from_secs(time_to_wait_sec));
-                eprintln!("preoomkiller: terminated by preoomkiller, exit");
                 std::process::exit(1)
             }
         }
@@ -81,7 +74,12 @@ fn do_work(args: Vec<String>, max_path: String, used_path: String, interval: u64
         let mut forward_signals = iterator::Signals::new(&[SIGINT, SIGTERM, SIGQUIT]).expect("Unable to watch for signals");
 
         for sig in forward_signals.forever() {
+            eprintln!("preoomkiller: signal {:#?} received ...", sig);
+            _shutdown_hook(time_to_wait_sec);
+
+            eprintln!("preoomkiller: sending {:#?} ...", sig);
             unsafe { libc::kill(child_id as i32, sig); }
+
             eprintln!("Terminated by forwarded signal");
             std::process::exit(1);
         }
@@ -94,6 +92,20 @@ fn do_work(args: Vec<String>, max_path: String, used_path: String, interval: u64
     tx.send(()).expect("Unable to send to child");
 
     memory_watcher.join().expect("joining memory_inspector fail");
+}
+
+fn _shutdown_hook(time_to_wait_sec: u64) {
+    let service_port = env::var("SERVICE_PORT")
+        .unwrap_or("4001".to_string());
+    let url = format!("http://127.0.0.1:{}/_shutdown", service_port);
+    eprintln!("preoomkiller: sending request to: {:#?}...", url);
+
+    let resp = reqwest::blocking::get(url);
+    println!("preoomkiller: response: {:#?}", resp);
+
+    eprintln!("preoomkiller: wait after shutdown hook ...");
+    thread::sleep(Duration::from_secs(time_to_wait_sec));
+    eprintln!("preoomkiller: ... done waiting.");
 }
 
 fn parse_int(string: &String) -> u64 {
